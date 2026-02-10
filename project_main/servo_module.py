@@ -7,7 +7,8 @@ import time
 from gpiozero import AngularServo
 from config import (factory, SERVO_PIN, SERVO_MIN_ANGLE, SERVO_MAX_ANGLE,
                     SERVO_MIN_PULSE, SERVO_MAX_PULSE, SERVO_ANGLES,
-                    SERVO_DELAY, SERVO_SETTLE_TIME, SERVO_STEP_DELAY)
+                    SERVO_DELAY, SERVO_SETTLE_TIME,
+                    SERVO_MAX_SPEED_DEG_PER_SEC, SERVO_SPEED_PERCENT)
 import shared_state
 
 
@@ -37,24 +38,39 @@ def servo_worker():
             # Clamp มุมให้อยู่ในช่วงที่กำหนด
             angle = max(SERVO_MIN_ANGLE, min(SERVO_MAX_ANGLE, angle))
             
-            # ถ้ามุมเปลี่ยน ให้ค่อยๆ เปลี่ยน (Smooth Move)
+            # ถ้ามุมเปลี่ยน ให้ค่อยๆ เปลี่ยน (Smooth Move by Speed %)
             if angle != last_angle:
-                start_angle = int(last_angle)
-                end_angle = int(angle)
-                step = 1 if end_angle > start_angle else -1
+                target_angle = angle
+                current_angle = last_angle
                 
-                for a in range(start_angle, end_angle, step):
-                    servo.angle = a
-                    shared_state.set_servo_angle(a)
-                    time.sleep(SERVO_STEP_DELAY)
+                # คำนวณความเร็ว (องศา/วินาที)
+                speed_dps = SERVO_MAX_SPEED_DEG_PER_SEC * (SERVO_SPEED_PERCENT / 100.0)
+                # ระยะทางที่ต้องหมุน
+                distance = abs(target_angle - current_angle)
+                # เวลาที่ต้องใช้ (วินาที)
+                duration = distance / speed_dps
+                # จำนวน steps (update ทุก 0.01 วิ)
+                steps = int(duration / 0.01)
+                
+                if steps < 1: steps = 1
+                
+                step_val = (target_angle - current_angle) / steps
+                
+                for i in range(steps):
+                    current_angle += step_val
+                    servo.angle = current_angle
+                    shared_state.set_servo_angle(int(current_angle))
+                    time.sleep(0.01)
                     
                     if shared_state.stop_event.is_set():
                         break
                 
-                servo.angle = arg_angle = angle
-                shared_state.set_servo_angle(angle)
+                # จบที่มุมเป้าหมายเป๊ะๆ
+                servo.angle = target_angle
+                shared_state.set_servo_angle(target_angle)
                 time.sleep(SERVO_SETTLE_TIME)
-                last_angle = angle
+                last_angle = target_angle
+            
             print(f"[Servo] Angle: {angle}°")
             
             # รอก่อนเปลี่ยนมุมถัดไป
