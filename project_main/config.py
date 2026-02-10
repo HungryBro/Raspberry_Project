@@ -20,8 +20,6 @@ SERVO_MAX_ANGLE = 90               # มุมสูงสุดที่ Servo 
 SERVO_ANGLES = [90, -90]         # ลำดับมุมที่ Servo จะหมุนไป วนลูป
 SERVO_DELAY = 1.5                  # เวลาหน่วง (วินาที) ก่อนเปลี่ยนมุมถัดไป
 SERVO_SETTLE_TIME = 1.0            # เวลาหน่วง (วินาที) รอให้ Servo เสถียรหลังตั้งมุมใหม่
-SERVO_MAX_SPEED_DEG_PER_SEC = 300  # ความเร็วสูงสุดของ Servo (ประมาณ 300 องศา/วินาที สำหรับ MG996R)
-SERVO_SPEED_PERCENT = 100          # ความเร็วที่ต้องการใช้ (0-100%) ยิ่งเยอะยิ่งเร็ว
 
 # --- ADC (ADS1115) ---
 ADC_CHANNEL = 0                    # ช่อง Analog ที่ใช้อ่านค่า (A0)
