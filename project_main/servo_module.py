@@ -37,18 +37,10 @@ def servo_worker():
             # Clamp มุมให้อยู่ในช่วงที่กำหนด
             angle = max(SERVO_MIN_ANGLE, min(SERVO_MAX_ANGLE, angle))
             
-            # ถ้ามุมเปลี่ยน ให้ค่อยๆ เปลี่ยน (Slowlife)
+            # ถ้ามุมเปลี่ยน ให้ค่อยๆ เปลี่ยน
             if angle != last_angle:
-                start = int(last_angle)
-                end = int(angle)
-                step = 1 if end > start else -1
-                
-                for i in range(start, end + step, step):
-                    if shared_state.stop_event.is_set():
-                        break
-                    servo.angle = i
-                    time.sleep(config.SERVO_STEP_DELAY)
-                
+                servo.angle = angle
+                time.sleep(SERVO_SETTLE_TIME)
                 last_angle = angle
             
             shared_state.set_servo_angle(angle)
