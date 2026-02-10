@@ -41,7 +41,6 @@ def servo_worker():
             if angle != last_angle:
                 servo.angle = angle
                 time.sleep(SERVO_SETTLE_TIME)
-                servo.detach()  # หยุดส่งสัญญาณเพื่อลดอาการสั่น (Jitter)
                 last_angle = angle
             
             shared_state.set_servo_angle(angle)
