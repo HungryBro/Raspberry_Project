@@ -19,17 +19,9 @@ def camera_worker():
         min_detection_confidence=FACE_CONFIDENCE
     )
     
-    # ใช้ GStreamer Pipeline สำหรับ Pi Camera Module 3 (Libcamera)
-    gst_pipeline = (
-        "libcamerasrc ! "
-        f"video/x-raw, width={CAMERA_WIDTH}, height={CAMERA_HEIGHT}, framerate=30/1 ! "
-        "videoconvert ! "
-        "video/x-raw, format=BGR ! "
-        "appsink"
-    )
-    
-    print(f"[Camera] กำลังเปิด Pi Camera Module 3...")
-    cap = cv2.VideoCapture(gst_pipeline, cv2.CAP_GSTREAMER)
+    cap = cv2.VideoCapture(CAMERA_INDEX)
+    cap.set(3, CAMERA_WIDTH)
+    cap.set(4, CAMERA_HEIGHT)
     
     if not cap.isOpened():
         print("[Camera] ไม่สามารถเปิดกล้องได้")
