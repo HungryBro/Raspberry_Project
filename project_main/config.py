@@ -14,7 +14,7 @@ factory = LGPIOFactory()  # สร้าง Pin Factory สำหรับคว
 # --- Servo ---
 SERVO_PIN = 19                     # ขา GPIO ที่ต่อกับสาย Signal ของ Servo (Pin 35)
 SERVO_MIN_PULSE = 0.0005           # Pulse Width ต่ำสุด 0.5ms (กำหนดมุมต่ำสุด)
-SERVO_MAX_PULSE = 0.0025           # Pulse Width สูงสุด 2.5ms (กำหนดมุมสูงสุด)
+SERVO_MAX_PULSE = 0.0025*3/4         # Pulse Width สูงสุด 2.5ms (กำหนดมุมสูงสุด)
 SERVO_MIN_ANGLE = -90              # มุมต่ำสุดที่ Servo หมุนได้ (องศา)
 SERVO_MAX_ANGLE = 90               # มุมสูงสุดที่ Servo หมุนได้ (องศา)
 SERVO_ANGLES = [0,90,180]     # ลำดับมุมที่ Servo จะหมุนไป วนลูป
