@@ -1,15 +1,18 @@
 """
 camera_module.py - Pi Camera Module 3 + Face Detection (MediaPipe)
+ใช้ Picamera2 (ติดตั้งมาพร้อม Raspberry Pi OS Bookworm)
 """
 
 import cv2
+import numpy as np
 import mediapipe as mp_lib
+from picamera2 import Picamera2
 from config import CAMERA_WIDTH, CAMERA_HEIGHT, FACE_MODEL, FACE_CONFIDENCE
 import shared_state
 
 
 def camera_worker():
-    """Thread (Main): เปิดกล้อง + ตรวจจับใบหน้า + แสดง OSD"""
+    """Thread (Main): เปิด Pi Camera + ตรวจจับใบหน้า + แสดง OSD"""
     
     # สร้าง MediaPipe Face Detection
     mp_face = mp_lib.solutions.face_detection
@@ -19,20 +22,17 @@ def camera_worker():
         min_detection_confidence=FACE_CONFIDENCE
     )
     
-    # ใช้ GStreamer Pipeline สำหรับ Pi Camera Module 3 (Libcamera)
-    gst_pipeline = (
-        "libcamerasrc ! "
-        f"video/x-raw, width={CAMERA_WIDTH}, height={CAMERA_HEIGHT}, framerate=30/1 ! "
-        "videoconvert ! "
-        "video/x-raw, format=BGR ! "
-        "appsink"
-    )
-    
-    print(f"[Camera] กำลังเปิด Pi Camera Module 3...")
-    cap = cv2.VideoCapture(gst_pipeline, cv2.CAP_GSTREAMER)
-    
-    if not cap.isOpened():
-        print("[Camera] ไม่สามารถเปิดกล้องได้")
+    # เปิด Pi Camera Module 3 ด้วย Picamera2
+    print("[Camera] กำลังเปิด Pi Camera Module 3 (Picamera2)...")
+    try:
+        picam2 = Picamera2()
+        config = picam2.create_preview_configuration(
+            main={"size": (CAMERA_WIDTH, CAMERA_HEIGHT), "format": "RGB888"}
+        )
+        picam2.configure(config)
+        picam2.start()
+    except Exception as e:
+        print(f"[Camera] ไม่สามารถเปิดกล้องได้: {e}")
         shared_state.stop_event.set()
         return
     
@@ -40,13 +40,13 @@ def camera_worker():
     
     try:
         while not shared_state.stop_event.is_set():
-            ret, frame = cap.read()
-            if not ret:
-                print("[Camera] อ่านภาพไม่ได้")
-                break
+            # จับภาพจาก Picamera2 (ได้เป็น RGB array)
+            rgb_frame = picam2.capture_array()
             
-            # แปลง BGR → RGB สำหรับ MediaPipe
-            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            # แปลง RGB → BGR สำหรับ OpenCV แสดงผล
+            frame = cv2.cvtColor(rgb_frame, cv2.COLOR_RGB2BGR)
+            
+            # ส่ง RGB ให้ MediaPipe ตรวจจับใบหน้า (ไม่ต้องแปลงอีกรอบ)
             results = face_detection.process(rgb_frame)
             
             # ตรวจสอบว่าเจอหน้าหรือไม่
@@ -107,6 +107,6 @@ def camera_worker():
         print(f"[Camera] เกิดข้อผิดพลาด: {e}")
     finally:
         face_detection.close()
-        cap.release()
+        picam2.stop()
         cv2.destroyAllWindows()
         print("[Camera] ปิดกล้องเรียบร้อย")
