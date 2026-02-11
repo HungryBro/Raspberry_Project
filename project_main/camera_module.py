@@ -1,18 +1,18 @@
 """
 camera_module.py - Pi Camera Module 3 + Face Detection (MediaPipe)
-ใช้ Picamera2 (ติดตั้งมาพร้อม Raspberry Pi OS Bookworm)
+ใช้ rpicam-vid (pipe YUV420 → OpenCV) รองรับ pyenv Python
 """
 
 import cv2
 import numpy as np
+import subprocess
 import mediapipe as mp_lib
-from picamera2 import Picamera2
 from config import CAMERA_WIDTH, CAMERA_HEIGHT, FACE_MODEL, FACE_CONFIDENCE
 import shared_state
 
 
 def camera_worker():
-    """Thread (Main): เปิด Pi Camera + ตรวจจับใบหน้า + แสดง OSD"""
+    """Thread (Main): เปิด Pi Camera ผ่าน rpicam-vid + ตรวจจับใบหน้า + แสดง OSD"""
     
     # สร้าง MediaPipe Face Detection
     mp_face = mp_lib.solutions.face_detection
@@ -22,31 +22,55 @@ def camera_worker():
         min_detection_confidence=FACE_CONFIDENCE
     )
     
-    # เปิด Pi Camera Module 3 ด้วย Picamera2
-    print("[Camera] กำลังเปิด Pi Camera Module 3 (Picamera2)...")
+    # เปิด Pi Camera ผ่าน rpicam-vid (pipe YUV420 ออกมา)
+    print("[Camera] กำลังเปิด Pi Camera Module 3 (rpicam-vid)...")
+    
+    cmd = [
+        'rpicam-vid',
+        '-t', '0',                          # ถ่ายไม่จำกัดเวลา
+        '--width', str(CAMERA_WIDTH),
+        '--height', str(CAMERA_HEIGHT),
+        '--codec', 'yuv420',                 # ส่งเป็น YUV420 raw
+        '--framerate', '30',
+        '-n',                                # ไม่ต้องแสดง preview
+        '-o', '-'                            # ส่งออกทาง stdout
+    ]
+    
     try:
-        picam2 = Picamera2()
-        config = picam2.create_preview_configuration(
-            main={"size": (CAMERA_WIDTH, CAMERA_HEIGHT), "format": "RGB888"}
-        )
-        picam2.configure(config)
-        picam2.start()
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    except FileNotFoundError:
+        print("[Camera] ไม่พบคำสั่ง rpicam-vid กรุณาติดตั้ง: sudo apt install rpicam-apps")
+        shared_state.stop_event.set()
+        return
     except Exception as e:
         print(f"[Camera] ไม่สามารถเปิดกล้องได้: {e}")
         shared_state.stop_event.set()
         return
     
+    # ขนาด YUV420 frame = width * height * 1.5
+    yuv_frame_size = CAMERA_WIDTH * CAMERA_HEIGHT * 3 // 2
+    
     print("[Camera] เริ่มทำงาน + Face Detection (กด 'q' เพื่อออก)")
     
     try:
         while not shared_state.stop_event.is_set():
-            # จับภาพจาก Picamera2 (ได้เป็น RGB array)
-            rgb_frame = picam2.capture_array()
+            # อ่าน YUV420 frame จาก rpicam-vid
+            raw_data = proc.stdout.read(yuv_frame_size)
             
-            # แปลง RGB → BGR สำหรับ OpenCV แสดงผล
-            frame = cv2.cvtColor(rgb_frame, cv2.COLOR_RGB2BGR)
+            if len(raw_data) != yuv_frame_size:
+                print("[Camera] อ่านภาพไม่ได้ (rpicam-vid หยุดทำงาน)")
+                break
             
-            # ส่ง RGB ให้ MediaPipe ตรวจจับใบหน้า (ไม่ต้องแปลงอีกรอบ)
+            # แปลง YUV420 → BGR (สำหรับ OpenCV แสดงผล)
+            yuv_frame = np.frombuffer(raw_data, dtype=np.uint8).reshape(
+                (CAMERA_HEIGHT * 3 // 2, CAMERA_WIDTH)
+            )
+            frame = cv2.cvtColor(yuv_frame, cv2.COLOR_YUV2BGR_I420)
+            
+            # แปลง YUV420 → RGB (สำหรับ MediaPipe)
+            rgb_frame = cv2.cvtColor(yuv_frame, cv2.COLOR_YUV2RGB_I420)
+            
+            # ตรวจจับใบหน้า
             results = face_detection.process(rgb_frame)
             
             # ตรวจสอบว่าเจอหน้าหรือไม่
@@ -107,6 +131,7 @@ def camera_worker():
         print(f"[Camera] เกิดข้อผิดพลาด: {e}")
     finally:
         face_detection.close()
-        picam2.stop()
+        proc.terminate()
+        proc.wait()
         cv2.destroyAllWindows()
         print("[Camera] ปิดกล้องเรียบร้อย")
