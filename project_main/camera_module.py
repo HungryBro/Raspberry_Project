@@ -1,10 +1,10 @@
 """
-camera_module.py - กล้อง USB + Face Detection (MediaPipe)
+camera_module.py - Pi Camera Module 3 + Face Detection (MediaPipe)
 """
 
 import cv2
 import mediapipe as mp_lib
-from config import CAMERA_INDEX, CAMERA_WIDTH, CAMERA_HEIGHT, FACE_MODEL, FACE_CONFIDENCE
+from config import CAMERA_WIDTH, CAMERA_HEIGHT, FACE_MODEL, FACE_CONFIDENCE
 import shared_state
 
 
