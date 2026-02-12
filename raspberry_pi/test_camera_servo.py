@@ -28,8 +28,8 @@ stop_event = threading.Event()
 
 # --- Servo Init ---
 servo = AngularServo(SERVO_PIN, 
-                     min_angle=-90, 
-                     max_angle=90,
+                     min_angle=0, 
+                     max_angle=180,
                      min_pulse_width=0.0005, 
                      max_pulse_width=0.0025)
 

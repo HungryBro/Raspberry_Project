@@ -15,8 +15,8 @@ factory = LGPIOFactory()
 SERVO_PIN = 13                     # ขา GPIO ที่ต่อกับ Servo (Pin 33)
 SERVO_MIN_PULSE = 0.0005           # Pulse Width ต่ำสุด 0.5ms
 SERVO_MAX_PULSE = 0.0025           # Pulse Width สูงสุด 2.5ms
-SERVO_MIN_ANGLE = -90              # มุมต่ำสุดที่ Servo หมุนได้ (องศา)
-SERVO_MAX_ANGLE = 90               # มุมสูงสุดที่ Servo หมุนได้ (องศา)
+SERVO_MIN_ANGLE = 0                # มุมต่ำสุดที่ Servo หมุนได้ (องศา)
+SERVO_MAX_ANGLE = 180              # มุมสูงสุดที่ Servo หมุนได้ (องศา)
 
 # --- Servo Scan Range (ช่วงที่กล้องมองเห็น) ---
 SERVO_SCAN_MIN = 57                # มุมเริ่ม scan (องศา) = 90 - 33
