@@ -1,7 +1,7 @@
 """
 test_camera_servo.py - ทดสอบกล้อง (rpicam-vid) พร้อมกับการหมุน Servo
 - กล้อง: แสดงภาพจาก Pi Camera Module 3 (rpicam-vid)
-- Servo: หมุน 0 -> 90 -> 0 -> -90 ช้าๆ (แยก Thread)
+- Servo: Scan 57° → 123° ตามมุม FOV กล้อง (แยก Thread)
 """
 
 import cv2
@@ -16,9 +16,11 @@ import warnings
 warnings.filterwarnings("ignore")
 
 # --- Config ---
-SERVO_PIN = 19
+SERVO_PIN = 13
 CAMERA_WIDTH = 640
 CAMERA_HEIGHT = 480
+SERVO_SCAN_MIN = 57
+SERVO_SCAN_MAX = 123
 
 # Global Variable สำหรับแชร์มุม Servo ไปโชว์บนกล้อง
 current_servo_angle = 0
@@ -48,31 +50,23 @@ def move_slowly(target, step_delay=0.02):
     current_servo_angle = target
 
 def servo_worker():
-    """Thread: ควบคุม Servo หมุนวนลูป"""
-    print("[Servo] เริ่มทำงาน...")
+    """Thread: ควบคุม Servo scan sweep 57° → 123° ตาม FOV กล้อง"""
+    print(f"[Servo] เริ่มทำงาน (Scan {SERVO_SCAN_MIN}° → {SERVO_SCAN_MAX}°)")
     global current_servo_angle
     
-    # ตั้งค่าเริ่มต้น
-    servo.angle = 0
-    current_servo_angle = 0
+    # ตั้งค่าเริ่มต้นที่ 90° (กลาง FOV)
+    servo.angle = 90
+    current_servo_angle = 90
     time.sleep(1)
     
     while not stop_event.is_set():
-        # 0 -> 90
-        move_slowly(90)
-        time.sleep(0.5)
+        # 57 -> 123 (scan ไปขวา)
+        move_slowly(SERVO_SCAN_MAX)
+        time.sleep(0.3)
         
-        # 90 -> 0
-        move_slowly(0)
-        time.sleep(0.5)
-        
-        # 0 -> -90
-        move_slowly(-90)
-        time.sleep(0.5)
-        
-        # -90 -> 0
-        move_slowly(0)
-        time.sleep(0.5)
+        # 123 -> 57 (scan กลับซ้าย)
+        move_slowly(SERVO_SCAN_MIN)
+        time.sleep(0.3)
         
     print("[Servo] หยุดทำงาน")
 
