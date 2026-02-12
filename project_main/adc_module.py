@@ -39,11 +39,11 @@ def adc_motor_worker():
                 
                 shared_state.set_voltage(voltage)
                 
-                # ตรวจสอบว่าเจอหน้าหรือไม่
-                if shared_state.face_detected.is_set():
+                # ตรวจสอบว่าพัดลมถูกสั่งหยุดหรือไม่ (No-Go Zone)
+                if not shared_state.is_fan_active():
                     motor_module.brake()
                     shared_state.set_motor_speed(0)
-                    print(f"[ADC+Motor] Voltage: {voltage:.2f}V -> Motor: 0% (FACE DETECTED!)")
+                    print(f"[ADC+Motor] Voltage: {voltage:.2f}V -> Motor: 0% (NO-GO ZONE!)")
                 else:
                     motor_module.control(speed)
                     shared_state.set_motor_speed(int(speed * 100))

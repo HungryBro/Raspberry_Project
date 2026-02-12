@@ -1,6 +1,7 @@
 """
 main.py - ไฟล์หลัก
-รวม Camera + Servo + ADC + Motor + Face Detection
+Smart Fan: Anti-Direct-Blow System
+กล้อง + Servo Scan + ADC Motor + Face Detection (หลบคนอัตโนมัติ)
 
 วิธีใช้งาน:
     cd project_main
@@ -16,16 +17,17 @@ import shared_state
 
 def main():
     print("=" * 60)
-    print("  Smart Fan: Camera + Servo + ADC + Motor + Face Detection")
+    print("  Smart Fan: Anti-Direct-Blow System")
     print("=" * 60)
-    print("  1. กล้อง + Face Detection (MediaPipe)")
-    print("  2. Servo หมุน 90° -> 0° -> -90°")
-    print("  3. ADC ควบคุม Motor:")
+    print("  1. กล้อง Pi Camera Module 3 (rpicam-vid)")
+    print("  2. Face Detection (MediaPipe)")
+    print("  3. Servo Scan 57° → 123° (6 Sectors)")
+    print("  4. ADC ควบคุม Motor:")
     print("     - < 1.0V     = 0%")
     print("     - 1.0-1.6V   = 30%")
     print("     - 1.6-2.0V   = 60%")
     print("     - > 2.0V     = 100%")
-    print("  4. ⚠️ เจอหน้าคน -> Motor หยุดทันที!")
+    print("  5. ⚠️ No-Go Zone: พัดลมหยุดเมื่อหันไปทิศคน!")
     print("=" * 60)
     print("  กด 'q' บนหน้าต่างกล้องเพื่อออก")
     print("=" * 60)
