@@ -1,0 +1,12 @@
+# --- Hardware Control (GPIO, PWM, I2C) ---
+gpiozero
+rpi-lgpio               # Backend สำหรับ GPIO บน Raspberry Pi 5
+adafruit-blinka         # Library มหัศจรรย์ช่วยให้ใช้ CircuitPython บน Linux ได้
+adafruit-circuitpython-ads1x15  # สำหรับ ADS1115 ADC Module
+
+# --- Computer Vision & AI ---
+opencv-python           # OpenCV (ต้องลง GStreamer บน Pi ด้วย: sudo apt install gstreamer1.0-libcamera)
+mediapipe               # Google MediaPipe สำหรับ Face Detection
+
+# --- Utilities ---
+numpy                   # มักจะถูกติดตั้งพร้อม OpenCV อยู่แล้ว แต่ใส่กันเหนียวไว้

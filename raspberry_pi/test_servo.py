@@ -7,7 +7,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 # GPIO 18
-servo = AngularServo(18, 
+servo = AngularServo(19, 
                      min_angle=-90, 
                      max_angle=90,
                      min_pulse_width=0.0005, 
