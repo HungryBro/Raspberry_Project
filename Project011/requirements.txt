@@ -1,9 +1,9 @@
-# Project011 - Smart Fan YOLO Finger Detection
+# Project011 - Smart Fan Sign Language Control
 # Dependencies สำหรับ Raspberry Pi 5
 
 gpiozero
 rpi-lgpio
 opencv-python
 mediapipe
-ultralytics
+inference
 numpy

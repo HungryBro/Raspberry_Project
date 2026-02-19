@@ -1,6 +1,6 @@
 """
 servo_module.py - ควบคุม Servo MG996R
-อ่านมุมเป้าหมายจาก shared_state (Jog ด้วย YOLO class 4/5)
+อ่านมุมเป้าหมายจาก shared_state (Jog ด้วย Sign T/Y)
 """
 
 import time
@@ -12,13 +12,12 @@ import shared_state
 
 def servo_worker():
     """Thread: อ่านมุมเป้าหมายจาก shared_state แล้วหมุน Servo ตาม
-    กล้องจะอัปเดต target_servo_angle เมื่อ YOLO ตรวจจับ class 4 (4 นิ้ว) หรือ class 5 (5 นิ้ว)
+    กล้องจะอัปเดต target_servo_angle เมื่อตรวจจับท่า T (+5°) หรือ Y (-5°)
     """
 
     servo = None
 
     try:
-        # สร้าง Servo โดยกำหนดเริ่มต้นที่ 0°
         servo = AngularServo(SERVO_PIN,
                              min_angle=SERVO_MIN_ANGLE,
                              max_angle=SERVO_MAX_ANGLE,
@@ -27,24 +26,20 @@ def servo_worker():
                              initial_angle=0,
                              pin_factory=factory)
 
-        print("[Servo] เริ่มทำงาน - เริ่มต้นที่ 0° (Jog ด้วย YOLO class 4/5)")
+        print("[Servo] เริ่มทำงาน - เริ่มต้นที่ 0° (Jog ด้วย Sign T/Y)")
 
-        # ตั้งค่าเริ่มต้น
         shared_state.set_servo_angle(0)
         shared_state.set_target_servo_angle(0)
-        time.sleep(1.0)  # รอให้ Servo เสถียร
+        time.sleep(1.0)
 
         last_angle = 0
 
         while not shared_state.stop_event.is_set():
-            # อ่านมุมเป้าหมายจาก shared_state
             status = shared_state.get_status()
             target = status["target_servo_angle"]
 
-            # Clamp มุมให้อยู่ในช่วง
             target = max(SERVO_MIN_ANGLE, min(SERVO_MAX_ANGLE, target))
 
-            # หมุนเฉพาะเมื่อมุมเปลี่ยน
             if target != last_angle:
                 print(f"[Servo] กำลังหมุนจาก {last_angle}° ไป {target}°")
                 servo.angle = target
@@ -53,7 +48,7 @@ def servo_worker():
                 last_angle = target
                 print(f"[Servo] Angle: {target}° OK")
 
-            time.sleep(0.05)  # ตรวจสอบทุก 50ms
+            time.sleep(0.05)
 
     except Exception as e:
         print(f"[Servo] เกิดข้อผิดพลาด: {e}")

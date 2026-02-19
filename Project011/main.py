@@ -1,6 +1,6 @@
 """
 main.py - ไฟล์หลัก
-Smart AI Fan: Camera + Servo + Motor + Face Detection + YOLO Finger Detection
+Smart AI Fan: Camera + Servo + Motor + Face Detection + Sign Language (Roboflow)
 
 วิธีใช้งาน:
     cd Project011
@@ -16,16 +16,19 @@ import shared_state
 
 def main():
     print("=" * 60)
-    print("  Smart AI Fan: YOLO Finger Detection")
+    print("  Smart AI Fan: Sign Language Control")
+    print("  (Roboflow extrdb/2 - ASL Hand Signs)")
     print("=" * 60)
     print("  1. กล้อง + Face Detection (MediaPipe)")
-    print("  2. YOLO Finger Detection (trained model)")
-    print("     - ✊ กำปั้น (class 0) = Motor 0%")
-    print("     - ☝️  1 นิ้ว  (class 1) = Motor 30%")
-    print("     - ✌️  2 นิ้ว  (class 2) = Motor 60%")
-    print("     - 🤟 3 นิ้ว  (class 3) = Motor 100%")
-    print("     - 🖖 4 นิ้ว  (class 4) = Servo +5°")
-    print("     - 🖐️  5 นิ้ว  (class 5) = Servo -5°")
+    print("  2. Sign Language Detection (Roboflow AI)")
+    print("     - ✊ S (กำปั้น)       = Motor 0%")
+    print("     - 👌 O (วงกลม)        = Motor 0%")
+    print("     - ☝️  D (ชี้ 1 นิ้ว)   = Motor 30%")
+    print("     - 🤞 X (งอนิ้วชี้)    = Motor 30%")
+    print("     - ✌️  V (ชู 2 นิ้ว)    = Motor 60%")
+    print("     - 🤟 W (ชู 3 นิ้ว)    = Motor 100%")
+    print("     - 👍 T (กำ+หัวแม่มือ) = Servo +5°")
+    print("     - 🤙 Y (ชากา)         = Servo -5°")
     print("  ⚠️  เจอหน้าคน -> Motor หยุดทันที!")
     print("=" * 60)
     print("  กด 'q' บนหน้าต่างกล้องเพื่อออก")

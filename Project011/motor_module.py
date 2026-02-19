@@ -1,6 +1,6 @@
 """
 motor_module.py - ควบคุม Motor Driver (TB6612 / L298N)
-ควบคุมความเร็วด้วย YOLO Finger Detection ผ่าน shared_state
+ควบคุมความเร็วด้วย Sign Language Detection ผ่าน shared_state
 """
 
 import time
@@ -54,7 +54,7 @@ def brake():
 def motor_worker():
     """Thread: อ่าน target_speed จาก shared_state แล้วสั่ง Motor
     - เจอหน้าคน → Motor = 0% (หยุดฉุกเฉิน)
-    - ไม่เจอหน้า → Motor ตาม target_speed ที่ YOLO คำนวณจากจำนวนนิ้ว
+    - ไม่เจอหน้า → Motor ตาม target_speed จากท่ามือภาษามือ
     """
     try:
         init()
@@ -62,7 +62,6 @@ def motor_worker():
 
         while not shared_state.stop_event.is_set():
             try:
-                # ตรวจสอบว่าเจอหน้าหรือไม่
                 if shared_state.face_detected.is_set():
                     brake()
                     shared_state.set_motor_speed(0)

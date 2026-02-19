@@ -1,6 +1,6 @@
 """
 shared_state.py - ตัวแปรร่วมระหว่าง Thread ทั้งหมด
-ใช้สำหรับระบบควบคุมด้วย YOLO Finger Detection
+ใช้สำหรับระบบควบคุมด้วย Sign Language Detection
 """
 
 import threading
