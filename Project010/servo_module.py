@@ -18,8 +18,7 @@ def servo_worker():
     servo = None
 
     try:
-        # สร้าง Servo โดยกำหนด initial_value=0 (0° ตรงกลาง)
-        # เพื่อป้องกันกระตุกตอนเริ่ม
+        # สร้าง Servo โดยกำหนดเริ่มต้นที่ 0°
         servo = AngularServo(SERVO_PIN,
                              min_angle=SERVO_MIN_ANGLE,
                              max_angle=SERVO_MAX_ANGLE,
@@ -33,11 +32,7 @@ def servo_worker():
         # ตั้งค่าเริ่มต้น
         shared_state.set_servo_angle(0)
         shared_state.set_target_servo_angle(0)
-        time.sleep(1.0)  # รอให้ Servo เสถียรที่ 0° ก่อนเริ่ม
-
-        # หลังจากเสถียรแล้ว detach เพื่อหยุดส่ง PWM (ไม่กระตุก)
-        servo.detach()
-        print("[Servo] พร้อมรับคำสั่งจากท่ามือ")
+        time.sleep(1.0)  # รอให้ Servo เสถียร
 
         last_angle = 0
 
@@ -51,18 +46,19 @@ def servo_worker():
 
             # หมุนเฉพาะเมื่อมุมเปลี่ยน
             if target != last_angle:
+                print(f"[Servo] กำลังหมุนจาก {last_angle}° ไป {target}°")
                 servo.angle = target
                 shared_state.set_servo_angle(target)
                 time.sleep(SERVO_SETTLE_TIME)
-                # detach หลังหมุนเสร็จ เพื่อหยุดส่ง PWM (ลดกระตุก)
-                servo.detach()
                 last_angle = target
-                print(f"[Servo] Angle: {target}°")
+                print(f"[Servo] Angle: {target}° OK")
 
             time.sleep(0.05)  # ตรวจสอบทุก 50ms
 
     except Exception as e:
         print(f"[Servo] เกิดข้อผิดพลาด: {e}")
+        import traceback
+        traceback.print_exc()
     finally:
         if servo is not None:
             try:
