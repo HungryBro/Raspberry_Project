@@ -19,8 +19,12 @@ from config import (CAMERA_WIDTH, CAMERA_HEIGHT, FACE_MODEL, FACE_CONFIDENCE,
 import shared_state
 
 
-def _count_fingers(hand_landmarks):
+def _count_fingers(hand_landmarks, handedness):
     """นับจำนวนนิ้วที่ชูขึ้น จาก MediaPipe Hand Landmarks
+
+    Args:
+        hand_landmarks: MediaPipe hand landmarks
+        handedness: "Left" หรือ "Right" (มือซ้าย/ขวา ตามที่ MediaPipe ตรวจจับ)
 
     Returns:
         dict: {
@@ -40,11 +44,17 @@ def _count_fingers(hand_landmarks):
     # นิ้วนาง: ปลายนิ้ว (16) สูงกว่าข้อ PIP (14)
     ring_up = lm[16].y < lm[14].y
 
-    # หัวแม่มือ: ปลายนิ้ว (4) ห่างจากโคนนิ้วชี้ (5) ในแนวนอน
-    thumb_up = abs(lm[4].x - lm[5].x) > 0.05
-
     # นิ้วก้อย: ปลายนิ้ว (20) สูงกว่าข้อ PIP (18)
     pinky_up = lm[20].y < lm[18].y
+
+    # หัวแม่มือ: ใช้แกน X เทียบ landmark 4 กับ 3
+    # กล้องจะเห็นภาพกลับด้าน (mirror) ดังนั้นต้องเช็คตามมือ
+    if handedness == "Right":
+        # มือขวา (ในภาพกลับด้าน): หัวแม่มือชู = tip(4) อยู่ซ้ายมากกว่า IP(3)
+        thumb_up = lm[4].x < lm[3].x
+    else:
+        # มือซ้าย (ในภาพกลับด้าน): หัวแม่มือชู = tip(4) อยู่ขวามากกว่า IP(3)
+        thumb_up = lm[4].x > lm[3].x
 
     # นับเฉพาะนิ้วชี้ + กลาง + นาง สำหรับควบคุมความเร็ว
     speed_fingers = sum([index_up, middle_up, ring_up])
@@ -122,6 +132,7 @@ def camera_worker():
     print("[Camera] เริ่มทำงาน + Face Detection + Hand Gesture (กด 'q' เพื่อออก)")
 
     last_jog_time = 0  # ป้องกัน Servo กระตุก
+    finger_info = ""   # ข้อมูลนิ้วสำหรับ OSD debug
 
     try:
         while not shared_state.stop_event.is_set():
@@ -152,6 +163,7 @@ def camera_worker():
                 # เจอหน้า → บังคับ speed = 0
                 shared_state.set_target_speed(0.0)
                 shared_state.set_finger_count(0)
+                finger_info = "BLOCKED (FACE)"
             else:
                 shared_state.face_detected.clear()
 
@@ -160,7 +172,12 @@ def camera_worker():
                 hand_results = hand_detection.process(rgb_frame)
 
                 if hand_results.multi_hand_landmarks:
-                    for hand_lm in hand_results.multi_hand_landmarks:
+                    for idx, hand_lm in enumerate(hand_results.multi_hand_landmarks):
+                        # ตรวจว่าเป็นมือซ้ายหรือขวา
+                        handedness = "Right"
+                        if hand_results.multi_handedness:
+                            handedness = hand_results.multi_handedness[idx].classification[0].label
+
                         # วาดโครงกระดูกมือ
                         mp_draw.draw_landmarks(
                             frame, hand_lm, mp_hands.HAND_CONNECTIONS,
@@ -169,8 +186,16 @@ def camera_worker():
                         )
 
                         # นับนิ้ว
-                        fingers = _count_fingers(hand_lm)
+                        fingers = _count_fingers(hand_lm, handedness)
                         speed_fingers = fingers["speed_fingers"]
+
+                        # สร้างข้อมูล debug
+                        t = "T" if fingers["thumb"] else "-"
+                        i = "I" if fingers["index"] else "-"
+                        m = "M" if fingers["middle"] else "-"
+                        r = "R" if fingers["ring"] else "-"
+                        p = "P" if fingers["pinky"] else "-"
+                        finger_info = f"{handedness[0]}:{t}{i}{m}{r}{p}"
 
                         # อัปเดตความเร็ว Motor
                         speed = _speed_from_fingers(speed_fingers)
@@ -193,6 +218,8 @@ def camera_worker():
                                 last_jog_time = now
 
                         break  # ใช้แค่มือแรก
+                else:
+                    finger_info = "NO HAND"
 
             # === อ่านค่าปัจจุบันสำหรับ OSD ===
             status = shared_state.get_status()
@@ -236,14 +263,18 @@ def camera_worker():
             cv2.putText(frame, face_text, (10, 90),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, face_color, 2)
 
-            # บรรทัดที่ 4: Fingers
+            # บรรทัดที่ 4: Fingers count
             cv2.putText(frame, f"Fingers: {fc}", (10, 120),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
 
+            # บรรทัดที่ 5: Finger detail debug (T=Thumb I=Index M=Middle R=Ring P=Pinky)
+            cv2.putText(frame, f"Detail: {finger_info}", (10, 150),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1)
+
             # Progress bar ความเร็ว Motor
             bar_width = int((m / 100) * 200)
-            cv2.rectangle(frame, (10, 130), (210, 150), (50, 50, 50), -1)
-            cv2.rectangle(frame, (10, 130), (10 + bar_width, 150), motor_color, -1)
+            cv2.rectangle(frame, (10, 160), (210, 180), (50, 50, 50), -1)
+            cv2.rectangle(frame, (10, 160), (10 + bar_width, 180), motor_color, -1)
 
             cv2.imshow('Smart Fan - Gesture Control', frame)
 
