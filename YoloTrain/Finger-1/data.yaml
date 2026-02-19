@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 6
+names: ['0', '1', '2', '3', '4', '5']
+
+roboflow:
+  workspace: dolphin-aedmg
+  project: finger-izdit-0cyzz
+  version: 1
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/dolphin-aedmg/finger-izdit-0cyzz/dataset/1
