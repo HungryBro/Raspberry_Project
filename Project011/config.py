@@ -37,8 +37,8 @@ FACE_CONFIDENCE = 0.5              # ค่าความมั่นใจข�
 
 # --- YOLO Finger Detection ---
 YOLO_MODEL_PATH = "models/best.pt" # path ไปยัง YOLO weights (train จาก Roboflow finger-izdit)
-YOLO_CONFIDENCE = 0.5              # ค่าความมั่นใจขั้นต่ำสำหรับ YOLO detection
-YOLO_IMG_SIZE = 320                # resize ภาพให้เล็กลงก่อนส่ง YOLO (ช่วย FPS)
+YOLO_CONFIDENCE = 0.75             # ค่าความมั่นใจขั้นต่ำ (เพิ่มจาก 0.5 เพื่อลด false positive)
+YOLO_IMG_SIZE = 512                # resize ภาพ (ตรงกับขนาดตอน train)
 GESTURE_INTERVAL = 0.3             # หน่วงเวลา Servo Jog ป้องกันกระตุก (วินาที)
 
 # Mapping: YOLO class → Motor speed
