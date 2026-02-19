@@ -1,8 +1,8 @@
 
-Finger - v1 2026-02-19 2:37pm
+Finger - v1 2024-02-16 1:53pm
 ==============================
 
-This dataset was exported via roboflow.com on February 19, 2026 at 7:53 AM GMT
+This dataset was exported via roboflow.com on September 7, 2025 at 1:37 AM GMT
 
 Roboflow is an end-to-end computer vision platform that helps you
 * collaborate with your team on computer vision projects
@@ -17,21 +17,13 @@ visit https://github.com/roboflow/notebooks
 
 To find over 100k other datasets and pre-trained models, visit https://universe.roboflow.com
 
-The dataset includes 602 images.
+The dataset includes 250 images.
 Fingers are annotated in YOLOv11 format.
 
 The following pre-processing was applied to each image:
 * Auto-orientation of pixel data (with EXIF-orientation stripping)
-* Resize to 512x512 (Stretch)
-* Grayscale (CRT phosphor)
+* Resize to 640x640 (Stretch)
 
-The following augmentation was applied to create 3 versions of each source image:
-* 50% probability of horizontal flip
-* 50% probability of vertical flip
-* Equal probability of one of the following 90-degree rotations: none, clockwise, counter-clockwise, upside-down
-* Randomly crop between 0 and 25 percent of the image
-* Random rotation of between -45 and +45 degrees
-* Random Gaussian blur of between 0 and 2 pixels
-* Salt and pepper noise was applied to 1.96 percent of pixels
+No image augmentation techniques were applied.
 
 

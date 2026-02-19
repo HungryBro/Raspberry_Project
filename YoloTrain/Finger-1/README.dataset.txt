@@ -1,5 +1,5 @@
-# Finger > 2026-02-19 2:37pm
-https://universe.roboflow.com/dolphin-aedmg/finger-izdit-0cyzz
+# Finger > 2024-02-16 1:53pm
+https://universe.roboflow.com/ai01-dsbqj/finger-izdit
 
 Provided by a Roboflow user
 License: CC BY 4.0

@@ -17,11 +17,11 @@ def main():
     # ขั้น 1: Download Dataset จาก Roboflow
     # ========================================
     print("=" * 50)
-    print("  ขั้น 1: กำลัง Download Dataset...")
+    print("  ขั้น 1: กำลัง Download Dataset (ต้นฉบับ)...")
     print("=" * 50)
 
     rf = Roboflow(api_key="ekTKDcHd22SkTXRleX5r")
-    project = rf.workspace("dolphin-aedmg").project("finger-izdit-0cyzz")
+    project = rf.workspace("ai01-dsbqj").project("finger-izdit")
     version = project.version(1)
     dataset = version.download("yolov11")
 
@@ -33,25 +33,27 @@ def main():
     print("=" * 50)
     print("  ขั้น 2: กำลัง Train YOLO11n...")
     print("  GPU: NVIDIA RTX 4050")
-    print("  ใช้เวลาประมาณ 10-15 นาที")
+    print("  Epochs: 100 (patience=15)")
+    print("  ใช้เวลาประมาณ 15-25 นาที")
     print("=" * 50)
 
     from ultralytics import YOLO
 
-    # โหลด pretrained YOLO11 nano (เล็กสุด เร็วสุด เหมาะกับ Pi 5)
+    # โหลด pretrained YOLO11 nano
     model = YOLO("yolo11n.pt")
 
-    # เริ่ม Train
+    # เริ่ม Train (parameter ปรับปรุง)
     results = model.train(
-        data=f"{dataset.location}/data.yaml",   # path ไปยัง dataset
-        epochs=50,                               # จำนวนรอบ train
-        imgsz=512,                               # ขนาดภาพ (ตรงกับ dataset)
-        batch=16,                                # RTX 4050 รับได้ 16
-        device=0,                                # ใช้ GPU (RTX 4050)
-        patience=10,                             # หยุดก่อนถ้าไม่ดีขึ้น 10 รอบ
+        data=f"{dataset.location}/data.yaml",
+        epochs=100,                              # เพิ่มเป็น 100 (patience จะหยุดก่อนถ้าพอแล้ว)
+        imgsz=512,                               # ตรงกับ dataset
+        batch=16,                                # RTX 4050 รับได้
+        device=0,                                # GPU
+        patience=15,                             # หยุดถ้าไม่ดีขึ้น 15 รอบ
         workers=0,                               # ป้องกัน multiprocessing error บน Windows
-        project="runs",                          # โฟลเดอร์เก็บผลลัพธ์
-        name="finger_detect",                    # ชื่อการ train
+        augment=True,                            # เปิด augmentation เพิ่มความแม่น
+        project="runs",
+        name="finger_v2",
     )
 
     # ========================================
@@ -60,8 +62,7 @@ def main():
     print("=" * 50)
     print("  ✅ Train เสร็จแล้ว!")
     print("=" * 50)
-    print(f"  📁 ไฟล์ best.pt อยู่ที่: runs/finger_detect/weights/best.pt")
-    print(f"  📁 ไฟล์ last.pt อยู่ที่: runs/finger_detect/weights/last.pt")
+    print(f"  📁 ไฟล์ best.pt อยู่ที่: runs/finger_v2/weights/best.pt")
     print()
     print("  ขั้นถัดไป:")
     print("  1. copy best.pt → Project011/models/best.pt")
