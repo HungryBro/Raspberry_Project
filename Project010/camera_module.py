@@ -48,12 +48,10 @@ def _count_fingers(hand_landmarks, handedness):
     pinky_up = lm[20].y < lm[18].y
 
     # หัวแม่มือ: ใช้แกน X เทียบ landmark 4 กับ 3
-    # กล้องจะเห็นภาพกลับด้าน (mirror) ดังนั้นต้องเช็คตามมือ
+    # กล้องจะเห็นภาพกลับด้าน ดังนั้นต้องเช็คตามมือซ้าย/ขวา
     if handedness == "Right":
-        # มือขวา (ในภาพกลับด้าน): หัวแม่มือชู = tip(4) อยู่ซ้ายมากกว่า IP(3)
         thumb_up = lm[4].x < lm[3].x
     else:
-        # มือซ้าย (ในภาพกลับด้าน): หัวแม่มือชู = tip(4) อยู่ขวามากกว่า IP(3)
         thumb_up = lm[4].x > lm[3].x
 
     # นับเฉพาะนิ้วชี้ + กลาง + นาง สำหรับควบคุมความเร็ว
@@ -132,7 +130,7 @@ def camera_worker():
     print("[Camera] เริ่มทำงาน + Face Detection + Hand Gesture (กด 'q' เพื่อออก)")
 
     last_jog_time = 0  # ป้องกัน Servo กระตุก
-    finger_info = ""   # ข้อมูลนิ้วสำหรับ OSD debug
+    finger_info = "NO HAND"   # ข้อมูลนิ้วสำหรับ OSD debug
 
     try:
         while not shared_state.stop_event.is_set():
@@ -152,80 +150,81 @@ def camera_worker():
             # แปลง YUV420 → RGB (สำหรับ MediaPipe)
             rgb_frame = cv2.cvtColor(yuv_frame, cv2.COLOR_YUV2RGB_I420)
 
-            # === Priority 1: Face Detection ===
+            # === Face Detection ===
             face_results = face_detection.process(rgb_frame)
+            has_face = False
 
             if face_results.detections:
+                has_face = True
                 shared_state.face_detected.set()
                 for detection in face_results.detections:
                     mp_draw.draw_detection(frame, detection)
-
-                # เจอหน้า → บังคับ speed = 0
-                shared_state.set_target_speed(0.0)
-                shared_state.set_finger_count(0)
-                finger_info = "BLOCKED (FACE)"
             else:
                 shared_state.face_detected.clear()
 
-            # === Priority 2 & 3: Hand Gesture (เฉพาะเมื่อไม่เจอหน้า) ===
-            if not shared_state.face_detected.is_set():
-                hand_results = hand_detection.process(rgb_frame)
+            # === Hand Gesture (ทำงานเสมอ ไม่ว่าจะเจอหน้าหรือไม่) ===
+            hand_results = hand_detection.process(rgb_frame)
 
-                if hand_results.multi_hand_landmarks:
-                    for idx, hand_lm in enumerate(hand_results.multi_hand_landmarks):
-                        # ตรวจว่าเป็นมือซ้ายหรือขวา
-                        handedness = "Right"
-                        if hand_results.multi_handedness:
-                            handedness = hand_results.multi_handedness[idx].classification[0].label
+            if hand_results.multi_hand_landmarks:
+                for idx, hand_lm in enumerate(hand_results.multi_hand_landmarks):
+                    # ตรวจว่าเป็นมือซ้ายหรือขวา
+                    handedness = "Right"
+                    if hand_results.multi_handedness:
+                        handedness = hand_results.multi_handedness[idx].classification[0].label
 
-                        # วาดโครงกระดูกมือ
-                        mp_draw.draw_landmarks(
-                            frame, hand_lm, mp_hands.HAND_CONNECTIONS,
-                            mp_drawing_styles.get_default_hand_landmarks_style(),
-                            mp_drawing_styles.get_default_hand_connections_style()
-                        )
+                    # วาดโครงกระดูกมือ
+                    mp_draw.draw_landmarks(
+                        frame, hand_lm, mp_hands.HAND_CONNECTIONS,
+                        mp_drawing_styles.get_default_hand_landmarks_style(),
+                        mp_drawing_styles.get_default_hand_connections_style()
+                    )
 
-                        # นับนิ้ว
-                        fingers = _count_fingers(hand_lm, handedness)
-                        speed_fingers = fingers["speed_fingers"]
+                    # นับนิ้ว
+                    fingers = _count_fingers(hand_lm, handedness)
+                    speed_fingers = fingers["speed_fingers"]
 
-                        # สร้างข้อมูล debug
-                        t = "T" if fingers["thumb"] else "-"
-                        i = "I" if fingers["index"] else "-"
-                        m = "M" if fingers["middle"] else "-"
-                        r = "R" if fingers["ring"] else "-"
-                        p = "P" if fingers["pinky"] else "-"
-                        finger_info = f"{handedness[0]}:{t}{i}{m}{r}{p}"
+                    # สร้างข้อมูล debug
+                    t = "T" if fingers["thumb"] else "-"
+                    i = "I" if fingers["index"] else "-"
+                    m = "M" if fingers["middle"] else "-"
+                    r = "R" if fingers["ring"] else "-"
+                    p = "P" if fingers["pinky"] else "-"
+                    finger_info = f"{handedness[0]}:{t}{i}{m}{r}{p}"
 
-                        # อัปเดตความเร็ว Motor
+                    # --- ควบคุมความเร็ว Motor (เฉพาะเมื่อไม่เจอหน้า) ---
+                    if has_face:
+                        shared_state.set_target_speed(0.0)
+                        shared_state.set_finger_count(0)
+                    else:
                         speed = _speed_from_fingers(speed_fingers)
                         shared_state.set_target_speed(speed)
                         shared_state.set_finger_count(speed_fingers)
 
-                        # Servo Jog (หัวแม่มือ / นิ้วก้อย) พร้อม debounce
-                        now = time.time()
-                        if now - last_jog_time >= GESTURE_INTERVAL:
-                            status = shared_state.get_status()
-                            current_target = status["target_servo_angle"]
+                    # --- Servo Jog (ทำงานเสมอ แม้เจอหน้า) ---
+                    now = time.time()
+                    if now - last_jog_time >= GESTURE_INTERVAL:
+                        status = shared_state.get_status()
+                        current_target = status["target_servo_angle"]
 
-                            if fingers["thumb"] and not fingers["pinky"]:
-                                new_angle = min(current_target + SERVO_STEP, SERVO_MAX_ANGLE)
-                                shared_state.set_target_servo_angle(new_angle)
-                                last_jog_time = now
-                            elif fingers["pinky"] and not fingers["thumb"]:
-                                new_angle = max(current_target - SERVO_STEP, SERVO_MIN_ANGLE)
-                                shared_state.set_target_servo_angle(new_angle)
-                                last_jog_time = now
+                        if fingers["thumb"] and not fingers["pinky"]:
+                            new_angle = min(current_target + SERVO_STEP, SERVO_MAX_ANGLE)
+                            shared_state.set_target_servo_angle(new_angle)
+                            last_jog_time = now
+                            print(f"[Gesture] Thumb -> Servo +{SERVO_STEP}° = {new_angle}°")
+                        elif fingers["pinky"] and not fingers["thumb"]:
+                            new_angle = max(current_target - SERVO_STEP, SERVO_MIN_ANGLE)
+                            shared_state.set_target_servo_angle(new_angle)
+                            last_jog_time = now
+                            print(f"[Gesture] Pinky -> Servo -{SERVO_STEP}° = {new_angle}°")
 
-                        break  # ใช้แค่มือแรก
-                else:
-                    finger_info = "NO HAND"
+                    break  # ใช้แค่มือแรก
+            else:
+                finger_info = "NO HAND"
 
             # === อ่านค่าปัจจุบันสำหรับ OSD ===
             status = shared_state.get_status()
             m = status["motor_speed"]
             s = status["servo_angle"]
-            has_face = status["face"]
             fc = status["finger_count"]
 
             # === แสดง OSD ===
@@ -267,8 +266,8 @@ def camera_worker():
             cv2.putText(frame, f"Fingers: {fc}", (10, 120),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
 
-            # บรรทัดที่ 5: Finger detail debug (T=Thumb I=Index M=Middle R=Ring P=Pinky)
-            cv2.putText(frame, f"Detail: {finger_info}", (10, 150),
+            # บรรทัดที่ 5: Finger detail (T=Thumb I=Index M=Middle R=Ring P=Pinky)
+            cv2.putText(frame, f"Hand: {finger_info}", (10, 150),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1)
 
             # Progress bar ความเร็ว Motor
