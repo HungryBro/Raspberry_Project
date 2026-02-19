@@ -1,0 +1,9 @@
+# Project012 - Smart Fan Sign Language Control (Local YOLO Model)
+# Dependencies สำหรับ Raspberry Pi 5
+
+gpiozero
+rpi-lgpio
+opencv-python
+mediapipe
+ultralytics
+numpy
