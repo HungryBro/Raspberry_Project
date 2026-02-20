@@ -2,17 +2,9 @@
 camera_module.py - Pi Camera Module 3 + Face Detection (MediaPipe)
                  + Sign Language Detection (Local YOLO Model)
 
-ใช้ rpicam-vid (pipe YUV420 → OpenCV) รองรับ pyenv Python
-
-ต่างจาก Project011:
-  - Project011 ใช้ Roboflow Cloud API (inference_sdk)
-  - Project012 ใช้ ultralytics YOLO โดยตรง กับ best.pt ที่ train เอง
-
-ระบบควบคุม:
-  - Face Detection (MediaPipe) → หยุด Motor ฉุกเฉิน
-  - Sign Language Detection (YOLO local) → ควบคุม Motor + Servo
-    s,o → Motor 0% / d,x → Motor 30% / v → Motor 60% / w → Motor 100%
-    t → Servo +5° / y → Servo -5°
+ Optimization (Frame Skipping):
+  - Face: ตรวจทุก 5 เฟรม
+  - YOLO: ตรวจทุก 5 เฟรม
 """
 
 import cv2
@@ -26,7 +18,7 @@ from config import (CAMERA_WIDTH, CAMERA_HEIGHT, FACE_MODEL, FACE_CONFIDENCE,
                     YOLO_MODEL_PATH, YOLO_CONFIDENCE, YOLO_IMG_SIZE,
                     SERVO_STEP, SERVO_MIN_ANGLE, SERVO_MAX_ANGLE,
                     GESTURE_INTERVAL, SIGN_SPEED_MAP,
-                    SERVO_RIGHT_SIGNS, SERVO_LEFT_SIGNS)
+                    SERVO_RIGHT_SIGNS, SERVO_LEFT_SIGNS, SKIP_FACE, SKIP_YOLO)
 import shared_state
 
 
@@ -46,7 +38,7 @@ ALL_VALID = list(SIGN_SPEED_MAP.keys()) + SERVO_RIGHT_SIGNS + SERVO_LEFT_SIGNS
 
 
 def camera_worker():
-    """Thread (Main): เปิด Pi Camera ผ่าน rpicam-vid + Face Detection + YOLO Sign Language + OSD"""
+    """Thread (Main): Face Detection + YOLO Sign Language + OSD"""
 
     # === สร้าง MediaPipe Face Detection ===
     mp_face = mp_lib.solutions.face_detection
@@ -92,14 +84,24 @@ def camera_worker():
     # ขนาด YUV420 frame = width * height * 1.5
     yuv_frame_size = CAMERA_WIDTH * CAMERA_HEIGHT * 3 // 2
 
-    print("[Camera] เริ่มทำงาน + Face Detection + YOLO Sign Language (กด 'q' เพื่อออก)")
+    print("[Camera] เริ่มทำงาน (Optimized: Skip Frames)")
 
     last_jog_time = 0         # ป้องกัน Servo กระตุก
     sign_label = "NO HAND"    # ข้อมูล Sign สำหรับ OSD
     fps_time = time.time()    # สำหรับคำนวณ FPS
     fps_counter = 0
     current_fps = 0
-    frame_skip = 0            # นับ frame สำหรับ skip (ลด load)
+    
+    # Frame counters
+    frame_cnt_face = 0
+    frame_cnt_yolo = 0
+    
+    # Cache
+    has_face = False
+    face_detections = None
+    detected_sign = None
+    best_conf = 0
+    yolo_boxes = None
 
     try:
         while not shared_state.stop_event.is_set():
@@ -115,8 +117,6 @@ def camera_worker():
                 (CAMERA_HEIGHT * 3 // 2, CAMERA_WIDTH)
             )
             frame = cv2.cvtColor(yuv_frame, cv2.COLOR_YUV2BGR_I420)
-
-            # แปลง YUV420 → RGB (สำหรับ MediaPipe)
             rgb_frame = cv2.cvtColor(yuv_frame, cv2.COLOR_YUV2RGB_I420)
 
             # === FPS Counter ===
@@ -127,32 +127,48 @@ def camera_worker():
                 fps_counter = 0
                 fps_time = time.time()
 
-            # === Face Detection (MediaPipe) — ทุก frame ===
-            face_results = face_detection.process(rgb_frame)
-            has_face = False
-
-            if face_results.detections:
-                has_face = True
-                shared_state.face_detected.set()
-                for detection in face_results.detections:
+            # ==========================================
+            # 1. Face Detection (Every SKIP_FACE frames)
+            # ==========================================
+            frame_cnt_face += 1
+            if frame_cnt_face >= SKIP_FACE:
+                frame_cnt_face = 0
+                face_results = face_detection.process(rgb_frame)
+                
+                has_face = False
+                face_detections = None
+                
+                if face_results.detections:
+                    has_face = True
+                    face_detections = face_results.detections
+                    shared_state.face_detected.set()
+                else:
+                    shared_state.face_detected.clear()
+            
+            # Draw Face (cache)
+            if face_detections:
+                for detection in face_detections:
                     mp_draw.draw_detection(frame, detection)
-            else:
-                shared_state.face_detected.clear()
 
-            # === Sign Language Detection (YOLO local) — ทุก 2 frames ===
-            frame_skip += 1
-            if frame_skip >= 2:
-                frame_skip = 0
-
-                # ส่ง frame ให้ YOLO model
+            # ==========================================
+            # 2. Sign Language Detection (Every SKIP_YOLO frames)
+            # ==========================================
+            frame_cnt_yolo += 1
+            if frame_cnt_yolo >= SKIP_YOLO:
+                frame_cnt_yolo = 0
+                
+                # Run YOLO logic
                 results = yolo_model(frame, imgsz=YOLO_IMG_SIZE,
                                      conf=YOLO_CONFIDENCE, verbose=False)
-
+                
+                # Reset temp vars
                 detected_sign = None
                 best_conf = 0
+                yolo_boxes = None
 
                 if results and len(results[0].boxes) > 0:
-                    for box in results[0].boxes:
+                    yolo_boxes = results[0].boxes
+                    for box in yolo_boxes:
                         cls_id = int(box.cls[0])
                         cls_name = yolo_model.names[cls_id].lower()
                         conf = float(box.conf[0])
@@ -162,12 +178,14 @@ def camera_worker():
                             detected_sign = cls_name
                             best_conf = conf
 
-                if detected_sign:
-                    display = SIGN_DISPLAY.get(detected_sign, detected_sign)
-                    sign_label = f"{display} ({best_conf:.0%})"
+            # --- Process Results (Logic Runs Every Frame based on Cache) ---
+            if detected_sign:
+                display = SIGN_DISPLAY.get(detected_sign, detected_sign)
+                sign_label = f"{display} ({best_conf:.0%})"
 
-                    # --- วาด bounding box ---
-                    for box in results[0].boxes:
+                # --- วาด bounding box ---
+                if yolo_boxes:
+                    for box in yolo_boxes:
                         cls_id = int(box.cls[0])
                         if yolo_model.names[cls_id].lower() == detected_sign:
                             x1, y1, x2, y2 = map(int, box.xyxy[0])
@@ -180,35 +198,35 @@ def camera_worker():
                                         (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
                             break
 
-                    # --- ควบคุมความเร็ว Motor ---
-                    if detected_sign in SIGN_SPEED_MAP:
-                        speed = SIGN_SPEED_MAP[detected_sign]
-                        if has_face:
-                            shared_state.set_target_speed(0.0)
-                            shared_state.set_finger_count(0)
-                        else:
-                            shared_state.set_target_speed(speed)
-                            finger_map = {"s": 0, "o": 0, "d": 1, "x": 1, "v": 2, "w": 3}
-                            shared_state.set_finger_count(finger_map.get(detected_sign, 0))
+                # --- ควบคุมความเร็ว Motor ---
+                if detected_sign in SIGN_SPEED_MAP:
+                    speed = SIGN_SPEED_MAP[detected_sign]
+                    if has_face:
+                        shared_state.set_target_speed(0.0)
+                        shared_state.set_finger_count(0)
+                    else:
+                        shared_state.set_target_speed(speed)
+                        finger_map = {"s": 0, "o": 0, "d": 1, "x": 1, "v": 2, "w": 3}
+                        shared_state.set_finger_count(finger_map.get(detected_sign, 0))
 
-                    # --- Servo Jog (ทำงานเสมอ แม้เจอหน้า) ---
-                    now = time.time()
-                    if now - last_jog_time >= GESTURE_INTERVAL:
-                        status = shared_state.get_status()
-                        current_target = status["target_servo_angle"]
+                # --- Servo Jog (ทำงานเสมอ แม้เจอหน้า) ---
+                now = time.time()
+                if now - last_jog_time >= GESTURE_INTERVAL:
+                    status = shared_state.get_status()
+                    current_target = status["target_servo_angle"]
 
-                        if detected_sign in SERVO_RIGHT_SIGNS:
-                            new_angle = min(current_target + SERVO_STEP, SERVO_MAX_ANGLE)
-                            shared_state.set_target_servo_angle(new_angle)
-                            last_jog_time = now
-                            print(f"[Sign] T → Servo +{SERVO_STEP}° = {new_angle}°")
-                        elif detected_sign in SERVO_LEFT_SIGNS:
-                            new_angle = max(current_target - SERVO_STEP, SERVO_MIN_ANGLE)
-                            shared_state.set_target_servo_angle(new_angle)
-                            last_jog_time = now
-                            print(f"[Sign] Y → Servo -{SERVO_STEP}° = {new_angle}°")
-                else:
-                    sign_label = "NO HAND"
+                    if detected_sign in SERVO_RIGHT_SIGNS:
+                        new_angle = min(current_target + SERVO_STEP, SERVO_MAX_ANGLE)
+                        shared_state.set_target_servo_angle(new_angle)
+                        last_jog_time = now
+                        print(f"[Sign] T → Servo +{SERVO_STEP}° = {new_angle}°")
+                    elif detected_sign in SERVO_LEFT_SIGNS:
+                        new_angle = max(current_target - SERVO_STEP, SERVO_MIN_ANGLE)
+                        shared_state.set_target_servo_angle(new_angle)
+                        last_jog_time = now
+                        print(f"[Sign] Y → Servo -{SERVO_STEP}° = {new_angle}°")
+            else:
+                sign_label = "NO HAND"
 
             # === อ่านค่าปัจจุบันสำหรับ OSD ===
             status = shared_state.get_status()
