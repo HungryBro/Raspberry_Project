@@ -234,8 +234,14 @@ def camera_worker():
             # วาด YOLO Box (ใช้ผลล่าสุด)
             if yolo_box_coords and yolo_sign:
                 x1, y1, x2, y2 = yolo_box_coords
+                
+                # ใช้ SIGN_DISPLAY เพื่อแสดงเป็นตัวเลข (d=1, s=0 ฯลฯ)
+                display_text = SIGN_DISPLAY.get(yolo_sign, yolo_sign.upper())
+                # ตัดเอาเฉพาะส่วนหน้า "0", "1" ถ้าต้องการ หรือจะโชว์เต็มๆ "0 (Stop)" ก็ได้
+                # ในที่นี้โชว์ตามที่ config ไว้น่าจะสวยกว่า
+                
                 cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                cv2.putText(frame, f"YOLO:{yolo_sign.upper()}",
+                cv2.putText(frame, f"YOLO:{display_text}",
                             (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
 
@@ -262,8 +268,8 @@ def camera_worker():
                     mp_detail = _count_fingers_detail(hlm, label)
                     mp_fingers = mp_detail["total"]
 
-            # วาด Hands (ใช้ผลล่าสุด)
-            if mp_landmarks:
+            # วาด Hands (ใช้ผลล่าสุด) -- แสดงเฉพาะเมื่อ *ไม่เจอ* YOLO Sign
+            if mp_landmarks and not yolo_sign:
                 mp_lib.solutions.drawing_utils.draw_landmarks(
                     frame, mp_landmarks, mp_hands.HAND_CONNECTIONS,
                     mp_lib.solutions.drawing_styles.get_default_hand_landmarks_style(),
@@ -350,7 +356,7 @@ def camera_worker():
                     # Translate YOLO sign to arbitrary finger count for display if needed, 
                     # but here we just pass 0 or maybe mapped number for UI consisteny
                     # (optional: mapping logic kept simple)
-                    finger_map = {"s":0,"o":0,"d":1,"x":1,"v":2,"w":3}
+                    finger_map = {"0":0,"0":0,"1":1,"1":1,"2":2,"3":3}
                     shared_state.set_finger_count(finger_map.get(yolo_sign, 0))
 
 
