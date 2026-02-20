@@ -51,6 +51,12 @@ YOLO_CONFIDENCE = 0.70
 YOLO_IMG_SIZE = 640
 GESTURE_INTERVAL = 0.3
 
+# === Frame Skipping (Optimization) ===
+# ลดภาระ CPU เพื่อเพิ่ม FPS
+SKIP_FACE = 5       # ตรวจหน้าทุกๆ 5 เฟรม (Safety ไม่ต้องถี่มาก)
+SKIP_YOLO = 5       # ตรวจ YOLO ทุกๆ 5 เฟรม (ท่ามือค้างไว้อยู่แล้ว)
+SKIP_HANDS = 3      # ตรวจนิ้วทุกๆ 3 เฟรม (Servo ต้องการความต่อเนื่องนิดหน่อย)
+
 # === Dual AI Detection Mode ===
 # YOLO (Primary)   → ตรวจจับท่ามือ ASL → ควบคุม Motor
 # MediaPipe (Servo) → ตรวจจับหัวแม่มือ/ก้อย → ควบคุม Servo
