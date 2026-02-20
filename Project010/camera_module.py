@@ -146,6 +146,7 @@ def camera_worker():
                 (CAMERA_HEIGHT * 3 // 2, CAMERA_WIDTH)
             )
             frame = cv2.cvtColor(yuv_frame, cv2.COLOR_YUV2BGR_I420)
+            frame = cv2.flip(frame, 1)  # กลับด้านกล้อง (Mirror)
 
             # แปลง YUV420 → RGB (สำหรับ MediaPipe)
             rgb_frame = cv2.cvtColor(yuv_frame, cv2.COLOR_YUV2RGB_I420)
