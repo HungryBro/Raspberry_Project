@@ -1,9 +1,9 @@
 """
-config.py - ค่าคงที่ทั้งหมดของระบบ Project013
+config.py - ค่าคงที่ทั้งหมดของระบบ Project013 (Modified: No Cross-Check)
 Smart Fan ควบคุมด้วย YOLO + MediaPipe (Dual AI)
 
-ใช้ AI 2 ตัวพร้อมกัน:
-  - YOLO (local model) → ตรวจจับท่ามือ ASL   → ควบคุม Motor
+ใช้ AI 2 ตัวแยกหน้าที่ชัดเจน:
+  - YOLO (local model) → ตรวจจับท่ามือ ASL   → ควบคุม Motor (เต็มตัว)
   - MediaPipe Hands   → ตรวจจับนิ้ว          → ควบคุม Servo (หัวแม่มือ/ก้อย)
   - MediaPipe Face    → ตรวจจับหน้า          → หยุด Motor ฉุกเฉิน
 
@@ -53,17 +53,11 @@ GESTURE_INTERVAL = 0.3
 
 # === Frame Skipping (Optimization) ===
 # ลดภาระ CPU เพื่อเพิ่ม FPS
-SKIP_FACE = 5       # ตรวจหน้าทุกๆ 5 เฟรม (Safety ไม่ต้องถี่มาก)
-SKIP_YOLO = 5       # ตรวจ YOLO ทุกๆ 5 เฟรม (ท่ามือค้างไว้อยู่แล้ว)
-SKIP_HANDS = 3      # ตรวจนิ้วทุกๆ 3 เฟรม (Servo ต้องการความต่อเนื่องนิดหน่อย)
+SKIP_FACE = 5       # ตรวจหน้าทุกๆ 5 เฟรม
+SKIP_YOLO = 5       # ตรวจ YOLO ทุกๆ 5 เฟรม
+SKIP_HANDS = 3      # ตรวจนิ้วทุกๆ 3 เฟรม
 
-# === Dual AI Detection Mode ===
-# YOLO (Primary)   → ตรวจจับท่ามือ ASL → ควบคุม Motor
-# MediaPipe (Servo) → ตรวจจับหัวแม่มือ/ก้อย → ควบคุม Servo
-# MediaPipe (Cross) → นับนิ้ว → cross-check กับ YOLO
-# ถ้าทั้ง 2 ตัวเห็นตรงกัน → ความมั่นใจสูง (DUAL CONFIRM)
-
-# === Mapping: Sign Language → Motor Speed (YOLO) ===
+# === Mapping: Sign Language → Motor Speed (YOLO Only) ===
 SIGN_SPEED_MAP = {
     "s": 0.0,   # กำปั้น → Motor 0%
     "o": 0.0,   # วงกลม → Motor 0%
@@ -76,19 +70,3 @@ SIGN_SPEED_MAP = {
 # === Mapping: MediaPipe Finger → Servo ===
 # หัวแม่มือชูอย่างเดียว (นิ้วอื่นงอ) → Servo +5° (หมุนขวา)
 # ก้อยชูอย่างเดียว (นิ้วอื่นงอ)       → Servo -5° (หมุนซ้าย)
-
-# === Mapping: Finger Count → Motor Speed (MediaPipe backup) ===
-FINGER_SPEED_MAP = {
-    0: 0.0,    # กำปั้น     = Motor 0%
-    1: 0.3,    # 1 นิ้ว     = Motor 30%
-    2: 0.6,    # 2 นิ้ว     = Motor 60%
-    3: 1.0,    # 3 นิ้ว     = Motor 100%
-}
-
-# === YOLO sign → finger count (สำหรับ cross-check) ===
-SIGN_TO_FINGERS = {
-    "s": 0, "o": 0,
-    "d": 1, "x": 1,
-    "v": 2,
-    "w": 3,
-}
