@@ -211,7 +211,7 @@ def camera_worker():
                         shared_state.set_finger_count(0)
                     else:
                         shared_state.set_target_speed(speed)
-                        finger_map = {"s": 0, "o": 0, "d": 1, "x": 1, "v": 2, "w": 3}
+                        finger_map = {"0":0,"0":0,"1":1,"1":1,"2":2,"3":3}
                         shared_state.set_finger_count(finger_map.get(detected_sign, 0))
 
                 # --- Servo Jog (ทำงานเสมอ แม้เจอหน้า) ---

@@ -40,7 +40,7 @@ FACE_MODEL = 1
 FACE_CONFIDENCE = 0.5
 
 # --- Roboflow Cloud API ---
-ROBOFLOW_API_KEY = "YOUR_API_KEY"  # ใส่ API Key ของคุณที่นี่
+ROBOFLOW_API_KEY = "ekTKDcHd22SkTXRleX5r"  # ใส่ API Key ของคุณที่นี่
 ROBOFLOW_MODEL_ID = "extrdb/2"
 SIGN_CONFIDENCE = 0.50
 GESTURE_INTERVAL = 0.3
