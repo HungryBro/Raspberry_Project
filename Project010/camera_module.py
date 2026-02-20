@@ -148,8 +148,8 @@ def camera_worker():
             frame = cv2.cvtColor(yuv_frame, cv2.COLOR_YUV2BGR_I420)
             frame = cv2.flip(frame, 1)  # กลับด้านกล้อง (Mirror)
 
-            # แปลง YUV420 → RGB (สำหรับ MediaPipe)
-            rgb_frame = cv2.cvtColor(yuv_frame, cv2.COLOR_YUV2RGB_I420)
+            # แปลง BGR (ที่กลับด้านแล้ว) → RGB (สำหรับ MediaPipe)
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
             # === Face Detection ===
             face_results = face_detection.process(rgb_frame)

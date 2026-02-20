@@ -118,7 +118,7 @@ def camera_worker():
             )
             frame = cv2.cvtColor(yuv_frame, cv2.COLOR_YUV2BGR_I420)
             frame = cv2.flip(frame, 1)  # กลับด้านกล้อง (Mirror)
-            rgb_frame = cv2.cvtColor(yuv_frame, cv2.COLOR_YUV2RGB_I420)
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
             # === FPS Counter ===
             fps_counter += 1
