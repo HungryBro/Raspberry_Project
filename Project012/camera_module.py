@@ -24,14 +24,14 @@ import shared_state
 
 # === แปลง sign class เป็น action อ่านง่าย ===
 SIGN_DISPLAY = {
-    "s": "S (fist) -> 0%",
-    "o": "O (circle) -> 0%",
-    "d": "D (point) -> 30%",
-    "x": "X (hook) -> 30%",
-    "v": "V (2 fingers) -> 60%",
-    "w": "W (3 fingers) -> 100%",
-    "t": "T -> Servo +5",
-    "y": "Y -> Servo -5",
+    "s": "0 (Stop)",
+    "o": "0 (Stop)",
+    "d": "1 (Low)",
+    "x": "1 (Low)",
+    "v": "2 (Medium)",
+    "w": "3 (High)",
+    "t": "T (Servo +5)",
+    "y": "Y (Servo -5)",
 }
 
 ALL_VALID = list(SIGN_SPEED_MAP.keys()) + SERVO_RIGHT_SIGNS + SERVO_LEFT_SIGNS

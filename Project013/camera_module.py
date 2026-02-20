@@ -27,9 +27,12 @@ import shared_state
 
 # === แปลง sign class เป็น action อ่านง่าย ===
 SIGN_DISPLAY = {
-    "s": "S (fist)", "o": "O (circle)",
-    "d": "D (point)", "x": "X (hook)",
-    "v": "V (2 fingers)", "w": "W (3 fingers)",
+    "s": "0 (Stop)",
+    "o": "0 (Stop)",
+    "d": "1 (Low)",
+    "x": "1 (Low)",
+    "v": "2 (Medium)",
+    "w": "3 (High)",
 }
 
 ALL_VALID = list(SIGN_SPEED_MAP.keys())
