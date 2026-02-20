@@ -1,7 +1,8 @@
 """
 camera_module.py - Pi Camera Module 3 + Dual AI Detection
-  1. YOLO (local model) → ตรวจจับท่ามือ ASL (primary)
-  2. MediaPipe Hands    → นับนิ้ว 21 landmarks (secondary/backup)
+  1. YOLO (local model) → ตรวจจับท่ามือ ASL → ควบคุม Motor (primary)
+  2. MediaPipe Hands    → ตรวจจับหัวแม่มือ/ก้อย → ควบคุม Servo
+                        → นับนิ้ว → cross-check กับ YOLO
   3. MediaPipe Face     → ตรวจจับหน้า → หยุด Motor ฉุกเฉิน
 
 ระบบ Cross-Check:
@@ -9,6 +10,10 @@ camera_module.py - Pi Camera Module 3 + Dual AI Detection
   - ถ้า YOLO เห็นอย่างเดียว        → YOLO ONLY
   - ถ้า MediaPipe เห็นอย่างเดียว    → MP ONLY (backup)
   - ถ้าไม่มีใครเห็น               → NO HAND
+
+Servo Control (MediaPipe):
+  - 👍 ชูหัวแม่มืออย่างเดียว (นิ้วอื่นงอ) → Servo +5°
+  - 🤙 ชูก้อยอย่างเดียว (นิ้วอื่นงอ)       → Servo -5°
 """
 
 import cv2
@@ -23,7 +28,7 @@ from config import (CAMERA_WIDTH, CAMERA_HEIGHT, FACE_MODEL, FACE_CONFIDENCE,
                     YOLO_MODEL_PATH, YOLO_CONFIDENCE, YOLO_IMG_SIZE,
                     SERVO_STEP, SERVO_MIN_ANGLE, SERVO_MAX_ANGLE,
                     GESTURE_INTERVAL, SIGN_SPEED_MAP, FINGER_SPEED_MAP,
-                    SERVO_RIGHT_SIGNS, SERVO_LEFT_SIGNS, SIGN_TO_FINGERS)
+                    SIGN_TO_FINGERS)
 import shared_state
 
 
@@ -32,28 +37,24 @@ SIGN_DISPLAY = {
     "s": "S (fist)", "o": "O (circle)",
     "d": "D (point)", "x": "X (hook)",
     "v": "V (2 fingers)", "w": "W (3 fingers)",
-    "t": "T (servo+)", "y": "Y (servo-)",
 }
 
-ALL_VALID = list(SIGN_SPEED_MAP.keys()) + SERVO_RIGHT_SIGNS + SERVO_LEFT_SIGNS
+ALL_VALID = list(SIGN_SPEED_MAP.keys())
 
 
-def _count_fingers(hand_landmarks, handedness_label):
-    """นับจำนวนนิ้วที่ชูขึ้น จาก MediaPipe Hand Landmarks"""
-    tips = [
-        mp_lib.solutions.hands.HandLandmark.INDEX_FINGER_TIP,
-        mp_lib.solutions.hands.HandLandmark.MIDDLE_FINGER_TIP,
-        mp_lib.solutions.hands.HandLandmark.RING_FINGER_TIP,
-        mp_lib.solutions.hands.HandLandmark.PINKY_TIP,
-    ]
-    pips = [
-        mp_lib.solutions.hands.HandLandmark.INDEX_FINGER_PIP,
-        mp_lib.solutions.hands.HandLandmark.MIDDLE_FINGER_PIP,
-        mp_lib.solutions.hands.HandLandmark.RING_FINGER_PIP,
-        mp_lib.solutions.hands.HandLandmark.PINKY_PIP,
-    ]
+def _count_fingers_detail(hand_landmarks, handedness_label):
+    """นับจำนวนนิ้วที่ชูขึ้น + ตรวจสอบหัวแม่มือ/ก้อยแยก
 
-    count = 0
+    Returns:
+        dict: {
+            "total": int (0-5),
+            "thumb": bool,
+            "index": bool,
+            "middle": bool,
+            "ring": bool,
+            "pinky": bool,
+        }
+    """
     lm = hand_landmarks.landmark
 
     # หัวแม่มือ (แกน X)
@@ -61,18 +62,36 @@ def _count_fingers(hand_landmarks, handedness_label):
     thumb_ip = lm[mp_lib.solutions.hands.HandLandmark.THUMB_IP]
 
     if handedness_label == "Right":
-        if thumb_tip.x < thumb_ip.x:
-            count += 1
+        thumb_up = thumb_tip.x < thumb_ip.x
     else:
-        if thumb_tip.x > thumb_ip.x:
-            count += 1
+        thumb_up = thumb_tip.x > thumb_ip.x
 
-    # นิ้วที่เหลือ 4 นิ้ว (แกน Y)
-    for tip_id, pip_id in zip(tips, pips):
-        if lm[tip_id].y < lm[pip_id].y:
-            count += 1
+    # นิ้วชี้
+    index_up = lm[mp_lib.solutions.hands.HandLandmark.INDEX_FINGER_TIP].y < \
+               lm[mp_lib.solutions.hands.HandLandmark.INDEX_FINGER_PIP].y
 
-    return count
+    # นิ้วกลาง
+    middle_up = lm[mp_lib.solutions.hands.HandLandmark.MIDDLE_FINGER_TIP].y < \
+                lm[mp_lib.solutions.hands.HandLandmark.MIDDLE_FINGER_PIP].y
+
+    # นิ้วนาง
+    ring_up = lm[mp_lib.solutions.hands.HandLandmark.RING_FINGER_TIP].y < \
+              lm[mp_lib.solutions.hands.HandLandmark.RING_FINGER_PIP].y
+
+    # ก้อย
+    pinky_up = lm[mp_lib.solutions.hands.HandLandmark.PINKY_TIP].y < \
+               lm[mp_lib.solutions.hands.HandLandmark.PINKY_PIP].y
+
+    total = sum([thumb_up, index_up, middle_up, ring_up, pinky_up])
+
+    return {
+        "total": total,
+        "thumb": thumb_up,
+        "index": index_up,
+        "middle": middle_up,
+        "ring": ring_up,
+        "pinky": pinky_up,
+    }
 
 
 def camera_worker():
@@ -124,7 +143,7 @@ def camera_worker():
 
     yuv_frame_size = CAMERA_WIDTH * CAMERA_HEIGHT * 3 // 2
 
-    print("[Camera] Dual AI Detection: YOLO + MediaPipe (กด 'q' เพื่อออก)")
+    print("[Camera] Dual AI Detection: YOLO (Motor) + MediaPipe (Servo) (กด 'q' เพื่อออก)")
 
     last_jog_time = 0
     fps_time = time.time()
@@ -136,8 +155,10 @@ def camera_worker():
     yolo_sign = None
     yolo_conf = 0
     mp_fingers = -1          # -1 = ไม่เจอมือ
+    mp_detail = None         # finger detail dict
     detection_mode = "NONE"  # DUAL / YOLO / MP / NONE
     action_label = "NO HAND"
+    servo_label = ""         # สำหรับ OSD
 
     try:
         while not shared_state.stop_event.is_set():
@@ -174,8 +195,9 @@ def camera_worker():
             frame_skip += 1
             if frame_skip >= 2:
                 frame_skip = 0
+                servo_label = ""
 
-                # --- AI #1: YOLO Sign Language ---
+                # --- AI #1: YOLO Sign Language (Motor) ---
                 yolo_sign = None
                 yolo_conf = 0
                 yolo_results = yolo_model(frame, imgsz=YOLO_IMG_SIZE,
@@ -196,15 +218,14 @@ def camera_worker():
                             cls_id = int(box.cls[0])
                             if yolo_model.names[cls_id].lower() == yolo_sign:
                                 x1, y1, x2, y2 = map(int, box.xyxy[0])
-                                is_servo = yolo_sign in SERVO_RIGHT_SIGNS + SERVO_LEFT_SIGNS
-                                color = (255, 165, 0) if is_servo else (0, 255, 0)
-                                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
                                 cv2.putText(frame, f"YOLO:{yolo_sign.upper()} {yolo_conf:.0%}",
-                                            (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+                                            (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
                                 break
 
-                # --- AI #2: MediaPipe Hands ---
+                # --- AI #2: MediaPipe Hands (Servo + Cross-Check) ---
                 mp_fingers = -1
+                mp_detail = None
                 hand_results = hands.process(rgb_frame)
 
                 if hand_results.multi_hand_landmarks:
@@ -215,22 +236,56 @@ def camera_worker():
                             mp_lib.solutions.drawing_styles.get_default_hand_landmarks_style(),
                             mp_lib.solutions.drawing_styles.get_default_hand_connections_style()
                         )
-                        # นับนิ้ว
+                        # นับนิ้ว (แบบละเอียด)
                         label = hand_results.multi_handedness[idx].classification[0].label
-                        mp_fingers = _count_fingers(hlm, label)
+                        mp_detail = _count_fingers_detail(hlm, label)
+                        mp_fingers = mp_detail["total"]
 
-                # === Cross-Check Logic ===
+                # === Servo Control: MediaPipe (หัวแม่มือ / ก้อย) ===
+                servo_action = None  # "right" or "left" or None
+
+                if mp_detail:
+                    thumb = mp_detail["thumb"]
+                    index = mp_detail["index"]
+                    middle = mp_detail["middle"]
+                    ring = mp_detail["ring"]
+                    pinky = mp_detail["pinky"]
+
+                    # 👍 หัวแม่มือชูอย่างเดียว (นิ้วอื่นงอหมด) → Servo +5°
+                    if thumb and not index and not middle and not ring and not pinky:
+                        servo_action = "right"
+                        servo_label = "SERVO: 👍 Thumb +5°"
+
+                    # 🤙 ก้อยชูอย่างเดียว (นิ้วอื่นงอหมด) → Servo -5°
+                    elif pinky and not thumb and not index and not middle and not ring:
+                        servo_action = "left"
+                        servo_label = "SERVO: 🤙 Pinky -5°"
+
+                # ดำเนินการ Servo
+                if servo_action:
+                    now = time.time()
+                    if now - last_jog_time >= GESTURE_INTERVAL:
+                        status = shared_state.get_status()
+                        current_target = status["target_servo_angle"]
+
+                        if servo_action == "right":
+                            new_angle = min(current_target + SERVO_STEP, SERVO_MAX_ANGLE)
+                            shared_state.set_target_servo_angle(new_angle)
+                            last_jog_time = now
+                            print(f"[MP Servo] 👍 Thumb → +{SERVO_STEP}° = {new_angle}°")
+                        elif servo_action == "left":
+                            new_angle = max(current_target - SERVO_STEP, SERVO_MIN_ANGLE)
+                            shared_state.set_target_servo_angle(new_angle)
+                            last_jog_time = now
+                            print(f"[MP Servo] 🤙 Pinky → -{SERVO_STEP}° = {new_angle}°")
+
+                # === Motor Cross-Check Logic (YOLO + MediaPipe) ===
                 yolo_expected_fingers = SIGN_TO_FINGERS.get(yolo_sign, -1) if yolo_sign else -1
                 final_speed = None
-                final_servo = None
 
-                if yolo_sign and mp_fingers >= 0:
-                    # ทั้ง 2 ตัวเห็น
-                    if yolo_sign in SERVO_RIGHT_SIGNS + SERVO_LEFT_SIGNS:
-                        # Servo mode → ใช้ YOLO เป็นหลัก
-                        detection_mode = "DUAL"
-                        final_servo = yolo_sign
-                    elif yolo_expected_fingers == mp_fingers:
+                if yolo_sign and mp_fingers >= 0 and not servo_action:
+                    # ทั้ง 2 ตัวเห็น (ไม่ใช่ Servo mode)
+                    if yolo_expected_fingers == mp_fingers:
                         # เห็นตรงกัน!
                         detection_mode = "DUAL CONFIRM"
                         final_speed = SIGN_SPEED_MAP.get(yolo_sign)
@@ -239,23 +294,20 @@ def camera_worker():
                         detection_mode = "DUAL (YOLO)"
                         final_speed = SIGN_SPEED_MAP.get(yolo_sign)
 
-                elif yolo_sign:
+                elif yolo_sign and not servo_action:
                     # YOLO อย่างเดียว
                     detection_mode = "YOLO"
                     if yolo_sign in SIGN_SPEED_MAP:
                         final_speed = SIGN_SPEED_MAP[yolo_sign]
-                    elif yolo_sign in SERVO_RIGHT_SIGNS + SERVO_LEFT_SIGNS:
-                        final_servo = yolo_sign
 
-                elif mp_fingers >= 0:
-                    # MediaPipe อย่างเดียว (backup)
+                elif mp_fingers >= 0 and not servo_action:
+                    # MediaPipe อย่างเดียว (backup motor)
                     detection_mode = "MP BACKUP"
                     if mp_fingers in FINGER_SPEED_MAP:
                         final_speed = FINGER_SPEED_MAP[mp_fingers]
-                    elif mp_fingers == 4:
-                        final_servo = "t"
-                    elif mp_fingers == 5:
-                        final_servo = "y"
+
+                elif servo_action:
+                    detection_mode = "MP SERVO"
 
                 else:
                     detection_mode = "NONE"
@@ -280,24 +332,6 @@ def camera_worker():
                         shared_state.set_target_speed(final_speed)
                         shared_state.set_finger_count(mp_fingers if mp_fingers >= 0 else 0)
 
-                # --- ควบคุม Servo ---
-                if final_servo:
-                    now = time.time()
-                    if now - last_jog_time >= GESTURE_INTERVAL:
-                        status = shared_state.get_status()
-                        current_target = status["target_servo_angle"]
-
-                        if final_servo in SERVO_RIGHT_SIGNS:
-                            new_angle = min(current_target + SERVO_STEP, SERVO_MAX_ANGLE)
-                            shared_state.set_target_servo_angle(new_angle)
-                            last_jog_time = now
-                            print(f"[Dual] Servo +{SERVO_STEP}° = {new_angle}° [{detection_mode}]")
-                        elif final_servo in SERVO_LEFT_SIGNS:
-                            new_angle = max(current_target - SERVO_STEP, SERVO_MIN_ANGLE)
-                            shared_state.set_target_servo_angle(new_angle)
-                            last_jog_time = now
-                            print(f"[Dual] Servo -{SERVO_STEP}° = {new_angle}° [{detection_mode}]")
-
             # === OSD ===
             status = shared_state.get_status()
             m = status["motor_speed"]
@@ -321,6 +355,11 @@ def camera_worker():
             cv2.putText(frame, f"Servo: {s} deg", (10, 60),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
 
+            # Servo action (thumb/pinky)
+            if servo_label:
+                cv2.putText(frame, servo_label, (10, CAMERA_HEIGHT - 20),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 165, 0), 2)
+
             # Face
             face_color = (0, 0, 255) if has_face else (0, 255, 0)
             face_text = "FACE: DETECTED" if has_face else "FACE: NONE"
@@ -335,7 +374,7 @@ def camera_worker():
             elif "YOLO" in detection_mode:
                 ai_color = (0, 200, 255)     # ส้ม = YOLO อย่างเดียว
             elif "MP" in detection_mode:
-                ai_color = (255, 150, 0)     # ฟ้า = MediaPipe อย่างเดียว
+                ai_color = (255, 165, 0)     # ฟ้า/ส้ม = MediaPipe
             else:
                 ai_color = (128, 128, 128)   # เทา = ไม่เจอ
 
