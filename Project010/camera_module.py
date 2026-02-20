@@ -81,11 +81,17 @@ def _speed_from_fingers(count):
 def camera_worker():
     """Thread (Main): เปิด Pi Camera ผ่าน rpicam-vid + ตรวจจับใบหน้า + ท่ามือ + แสดง OSD"""
 
+    # === สร้าง MediaPipe Face Detection ===
+    mp_face = mp_lib.solutions.face_detection
+    mp_draw = mp_lib.solutions.drawing_utils
+    face_detection = mp_face.FaceDetection(
+        model_selection=FACE_MODEL,
+        min_detection_confidence=FACE_CONFIDENCE
+    )
+
     # === สร้าง MediaPipe Hands ===
     mp_hands = mp_lib.solutions.hands
     mp_drawing_styles = mp_lib.solutions.drawing_styles
-    mp_draw = mp_lib.solutions.drawing_utils
-    mp_draw = mp_lib.solutions.drawing_utils  #ย้าย mp_draw มาไว้ตรงนี้แทน
     hand_detection = mp_hands.Hands(
         model_complexity=HAND_MODEL_COMPLEXITY,
         max_num_hands=1,
@@ -121,7 +127,7 @@ def camera_worker():
     # ขนาด YUV420 frame = width * height * 1.5
     yuv_frame_size = CAMERA_WIDTH * CAMERA_HEIGHT * 3 // 2
 
-    print("[Camera] เริ่มทำงาน + Hand Gesture (กด 'q' เพื่อออก)")
+    print("[Camera] เริ่มทำงาน + Face Detection + Hand Gesture (กด 'q' เพื่อออก)")
 
     last_jog_time = 0  # ป้องกัน Servo กระตุก
     finger_info = "NO HAND"   # ข้อมูลนิ้วสำหรับ OSD debug
@@ -145,7 +151,19 @@ def camera_worker():
             # แปลง BGR (ที่กลับด้านแล้ว) → RGB (สำหรับ MediaPipe)
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-            # === Hand Gesture ===
+            # === Face Detection ===
+            face_results = face_detection.process(rgb_frame)
+            has_face = False
+
+            if face_results.detections:
+                has_face = True
+                shared_state.face_detected.set()
+                for detection in face_results.detections:
+                    mp_draw.draw_detection(frame, detection)
+            else:
+                shared_state.face_detected.clear()
+
+            # === Hand Gesture (ทำงานเสมอ ไม่ว่าจะเจอหน้าหรือไม่) ===
             hand_results = hand_detection.process(rgb_frame)
 
             if hand_results.multi_hand_landmarks:
@@ -174,12 +192,16 @@ def camera_worker():
                     p = "P" if fingers["pinky"] else "-"
                     finger_info = f"{handedness[0]}:{t}{i}{m}{r}{p}"
 
-                    # --- ควบคุมความเร็ว Motor ---
-                    speed = _speed_from_fingers(speed_fingers)
-                    shared_state.set_target_speed(speed)
-                    shared_state.set_finger_count(speed_fingers)
+                    # --- ควบคุมความเร็ว Motor (เฉพาะเมื่อไม่เจอหน้า) ---
+                    if has_face:
+                        shared_state.set_target_speed(0.0)
+                        shared_state.set_finger_count(0)
+                    else:
+                        speed = _speed_from_fingers(speed_fingers)
+                        shared_state.set_target_speed(speed)
+                        shared_state.set_finger_count(speed_fingers)
 
-                    # --- Servo Jog ---
+                    # --- Servo Jog (ทำงานเสมอ แม้เจอหน้า) ---
                     now = time.time()
                     if now - last_jog_time >= GESTURE_INTERVAL:
                         status = shared_state.get_status()
@@ -209,15 +231,19 @@ def camera_worker():
             # === แสดง OSD ===
 
             # บรรทัดที่ 1: Motor
-            if m == 0:
-                motor_color = (128, 128, 128)
-            elif m <= 30:
-                motor_color = (0, 255, 255)
-            elif m <= 60:
-                motor_color = (0, 165, 255)
-            else:
+            if has_face:
                 motor_color = (0, 0, 255)
-            motor_text = f"MOTOR: {m}%"
+                motor_text = "MOTOR: 0% (FACE!)"
+            else:
+                if m == 0:
+                    motor_color = (128, 128, 128)
+                elif m <= 30:
+                    motor_color = (0, 255, 255)
+                elif m <= 60:
+                    motor_color = (0, 165, 255)
+                else:
+                    motor_color = (0, 0, 255)
+                motor_text = f"MOTOR: {m}%"
 
             cv2.putText(frame, motor_text, (10, 30),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, motor_color, 2)
@@ -226,12 +252,23 @@ def camera_worker():
             cv2.putText(frame, f"Servo: {s} deg", (10, 60),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
 
-            # บรรทัดที่ 3: Fingers count
-            cv2.putText(frame, f"Fingers: {fc}", (10, 90),
+            # บรรทัดที่ 3: Face
+            if has_face:
+                face_text = "FACE: DETECTED"
+                face_color = (0, 0, 255)
+            else:
+                face_text = "FACE: NONE"
+                face_color = (0, 255, 0)
+
+            cv2.putText(frame, face_text, (10, 90),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, face_color, 2)
+
+            # บรรทัดที่ 4: Fingers count
+            cv2.putText(frame, f"Fingers: {fc}", (10, 120),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
 
-            # บรรทัดที่ 4: Finger detail
-            cv2.putText(frame, f"Hand: {finger_info}", (10, 120),
+            # บรรทัดที่ 5: Finger detail (T=Thumb I=Index M=Middle R=Ring P=Pinky)
+            cv2.putText(frame, f"Hand: {finger_info}", (10, 150),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1)
 
             # Progress bar ความเร็ว Motor
@@ -248,6 +285,7 @@ def camera_worker():
     except Exception as e:
         print(f"[Camera] เกิดข้อผิดพลาด: {e}")
     finally:
+        face_detection.close()
         hand_detection.close()
         proc.terminate()
         proc.wait()

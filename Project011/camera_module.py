@@ -38,7 +38,13 @@ SIGN_DISPLAY = {
 def camera_worker():
     """Thread (Main): Face Detection + Sign Language + OSD"""
 
-
+    # === สร้าง MediaPipe Face Detection ===
+    mp_face = mp_lib.solutions.face_detection
+    mp_draw = mp_lib.solutions.drawing_utils
+    face_detection = mp_face.FaceDetection(
+        model_selection=FACE_MODEL,
+        min_detection_confidence=FACE_CONFIDENCE
+    )
 
     # === โหลด Roboflow Model ===
     print(f"[Camera] กำลังโหลด Roboflow model: {ROBOFLOW_MODEL_ID}")
@@ -86,10 +92,12 @@ def camera_worker():
     current_fps = 0
     
     # Frame counters
-    # Frame counters
+    frame_cnt_face = 0
     frame_cnt_cloud = 0
     
     # Cache state (เก็บค่าไว้ใช้ระหว่าง frame ที่ skip)
+    has_face = False
+    face_detections = None
     detected_sign = None
     best_conf = 0
     latest_predictions = []
@@ -119,7 +127,28 @@ def camera_worker():
                 fps_counter = 0
                 fps_time = time.time()
 
-
+            # ==========================================
+            # 1. Face Detection (Every SKIP_FACE frames)
+            # ==========================================
+            frame_cnt_face += 1
+            if frame_cnt_face >= SKIP_FACE:
+                frame_cnt_face = 0
+                face_results = face_detection.process(rgb_frame)
+                
+                has_face = False
+                face_detections = None
+                
+                if face_results.detections:
+                    has_face = True
+                    face_detections = face_results.detections
+                    shared_state.face_detected.set()
+                else:
+                    shared_state.face_detected.clear()
+            
+            # Draw Face (from cache)
+            if face_detections:
+                for detection in face_detections:
+                    mp_draw.draw_detection(frame, detection)
 
             # ==========================================
             # 2. Sign Language Detection (Every SKIP_CLOUD frames)
@@ -177,9 +206,13 @@ def camera_worker():
                 # --- ควบคุมความเร็ว Motor ---
                 if detected_sign in SIGN_SPEED_MAP:
                     speed = SIGN_SPEED_MAP[detected_sign]
-                    shared_state.set_target_speed(speed)
-                    finger_map = {"0":0,"0":0,"1":1,"1":1,"2":2,"3":3}
-                    shared_state.set_finger_count(finger_map.get(detected_sign, 0))
+                    if has_face:
+                        shared_state.set_target_speed(0.0)
+                        shared_state.set_finger_count(0)
+                    else:
+                        shared_state.set_target_speed(speed)
+                        finger_map = {"0":0,"0":0,"1":1,"1":1,"2":2,"3":3}
+                        shared_state.set_finger_count(finger_map.get(detected_sign, 0))
 
                 # --- Servo Jog (ทำงานเสมอ แม้เจอหน้า) ---
                 now = time.time()
@@ -209,15 +242,19 @@ def camera_worker():
             # === แสดง OSD ===
 
             # บรรทัดที่ 1: Motor
-            if m == 0:
-                motor_color = (128, 128, 128)
-            elif m <= 30:
-                motor_color = (0, 255, 255)
-            elif m <= 60:
-                motor_color = (0, 165, 255)
-            else:
+            if has_face:
                 motor_color = (0, 0, 255)
-            motor_text = f"MOTOR: {m}%"
+                motor_text = "MOTOR: 0% (FACE!)"
+            else:
+                if m == 0:
+                    motor_color = (128, 128, 128)
+                elif m <= 30:
+                    motor_color = (0, 255, 255)
+                elif m <= 60:
+                    motor_color = (0, 165, 255)
+                else:
+                    motor_color = (0, 0, 255)
+                motor_text = f"MOTOR: {m}%"
 
             cv2.putText(frame, motor_text, (10, 30),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, motor_color, 2)
@@ -226,12 +263,23 @@ def camera_worker():
             cv2.putText(frame, f"Servo: {s} deg", (10, 60),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
 
-            # บรรทัดที่ 3: Sign detection result
-            cv2.putText(frame, f"SIGN: {sign_label}", (10, 90),
+            # บรรทัดที่ 3: Face
+            if has_face:
+                face_text = "FACE: DETECTED"
+                face_color = (0, 0, 255)
+            else:
+                face_text = "FACE: NONE"
+                face_color = (0, 255, 0)
+
+            cv2.putText(frame, face_text, (10, 90),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, face_color, 2)
+
+            # บรรทัดที่ 4: Sign detection result
+            cv2.putText(frame, f"SIGN: {sign_label}", (10, 120),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
 
-            # บรรทัดที่ 4: FPS
-            cv2.putText(frame, f"FPS: {current_fps:.1f}", (10, 120),
+            # บรรทัดที่ 5: FPS
+            cv2.putText(frame, f"FPS: {current_fps:.1f}", (10, 150),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1)
 
             # Progress bar ความเร็ว Motor
@@ -250,6 +298,7 @@ def camera_worker():
         import traceback
         traceback.print_exc()
     finally:
+        face_detection.close()
         proc.terminate()
         proc.wait()
         cv2.destroyAllWindows()
